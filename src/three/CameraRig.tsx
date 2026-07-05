@@ -35,12 +35,33 @@ function findSegment(progress: number): readonly [Waypoint, Waypoint] {
   return [WAYPOINTS[WAYPOINTS.length - 2], WAYPOINTS[WAYPOINTS.length - 1]] as const;
 }
 
+const BASE_FOV = 55;
+const BASE_ASPECT = 16 / 9;
+// how much horizontal field of view the scene is designed around — kept
+// constant across aspect ratios so the galaxy's full width stays in frame
+const BASE_HFOV = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(BASE_FOV) / 2) * BASE_ASPECT);
+
+/**
+ * On wide/landscape screens (laptops, tablets landscape) this returns the
+ * original fixed FOV untouched. On narrower/portrait screens (phones) it
+ * widens the vertical FOV just enough to keep the same horizontal framing —
+ * effectively "zooming out" so the whole galaxy composition stays visible
+ * instead of being cropped, the same way it looks on a laptop.
+ */
+function responsiveFov(aspect: number): number {
+  if (aspect >= BASE_ASPECT) return BASE_FOV;
+  const vFov = 2 * Math.atan(Math.tan(BASE_HFOV / 2) / aspect);
+  const vFovDeg = THREE.MathUtils.radToDeg(vFov);
+  return THREE.MathUtils.clamp(vFovDeg, BASE_FOV, 100);
+}
+
 export function CameraRig() {
-  const { camera } = useThree();
+  const { camera, size } = useThree();
   const target = useRef(new THREE.Vector3(0, 0, 8));
   const targetRot = useRef(new THREE.Euler(0, 0, 0));
   const desired = useRef(new THREE.Vector3());
   const pointer = useRef({ x: 0, y: 0 });
+  const lastAspect = useRef(0);
 
   useEffect(() => {
     function onMove(e: PointerEvent) {
@@ -52,6 +73,13 @@ export function CameraRig() {
   }, []);
 
   useFrame((_, delta) => {
+    const aspect = size.width / size.height;
+    if (Math.abs(aspect - lastAspect.current) > 0.001 && camera instanceof THREE.PerspectiveCamera) {
+      lastAspect.current = aspect;
+      camera.fov = responsiveFov(aspect);
+      camera.updateProjectionMatrix();
+    }
+
     const progress = useScrollStore.getState().progress;
     const [a, b] = findSegment(progress);
     const span = b.progress - a.progress || 1;
