@@ -5,12 +5,6 @@ interface Name3DProps {
   text: string;
 }
 
-/** Roughly how long the full staggered tumble-in takes, in seconds — used to
- * time the shimmer sweep so it only kicks in once every letter has landed. */
-function entranceDuration(charCount: number) {
-  return 0.25 + charCount * 0.055 + 0.9;
-}
-
 interface LetterProps {
   char: string;
   index: number;
@@ -31,10 +25,6 @@ function Letter({ char, index, setRef }: LetterProps) {
     }),
     [],
   );
-
-  if (char === " ") {
-    return <span className="inline-block w-[0.32em]" aria-hidden="true" />;
-  }
 
   return (
     <span
@@ -83,11 +73,12 @@ function Letter({ char, index, setRef }: LetterProps) {
 /** Each letter of the name tumbles in from a random 3D orientation and depth on
  * load, settles with spring physics, then reacts directly to the cursor: any
  * letter the pointer passes near lifts, scales, and tilts toward it in 3D,
- * creating a rippling "magnetic" wave across the name as the mouse moves. */
+ * creating a rippling "magnetic" wave across the name as the mouse moves.
+ * Letters are grouped per-word (each word is its own atomic inline-block) so
+ * a word wraps as a whole on narrow screens instead of splitting mid-word. */
 export function Name3D({ text }: Name3DProps) {
-  const containerRef = useRef<HTMLSpanElement>(null);
   const letterRefs = useRef<Array<HTMLSpanElement | null>>([]);
-  const chars = useMemo(() => text.split(""), [text]);
+  const words = useMemo(() => text.split(" "), [text]);
 
   useEffect(() => {
     if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
@@ -123,34 +114,28 @@ export function Name3D({ text }: Name3DProps) {
     return () => window.removeEventListener("pointermove", onMove);
   }, []);
 
-  return (
-    <span ref={containerRef} className="relative inline-block" style={{ perspective: 1200, transformStyle: "preserve-3d" }}>
-      {chars.map((char, i) => (
-        <Letter
-          key={i}
-          char={char}
-          index={i}
-          setRef={(el) => {
-            letterRefs.current[i] = el;
-          }}
-        />
-      ))}
+  let globalIndex = 0;
 
-      <motion.span
-        aria-hidden="true"
-        className="light-sweep pointer-events-none absolute inset-0"
-        style={{
-          backgroundClip: "text",
-          WebkitBackgroundClip: "text",
-          color: "transparent",
-          mixBlendMode: "overlay",
-        }}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: entranceDuration(chars.length), duration: 0.6 }}
-      >
-        {text}
-      </motion.span>
+  return (
+    <span className="relative inline-block" style={{ perspective: 1200, transformStyle: "preserve-3d" }}>
+      {words.map((word, wi) => (
+        <span key={wi} className="inline-block whitespace-nowrap">
+          {word.split("").map((char) => {
+            const i = globalIndex++;
+            return (
+              <Letter
+                key={i}
+                char={char}
+                index={i}
+                setRef={(el) => {
+                  letterRefs.current[i] = el;
+                }}
+              />
+            );
+          })}
+          {wi < words.length - 1 ? " " : null}
+        </span>
+      ))}
     </span>
   );
 }
